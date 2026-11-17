@@ -1,58 +1,49 @@
 # kube-scheduler
 
-从 [kubernetes/kubernetes](https://github.com/kubernetes/kubernetes) **源码中抽出的 kube-scheduler**，方便单独阅读、做调用图分析或本地调试，不必克隆完整 k8s 仓库。
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-> 本仓库**不是** Kubernetes 官方维护的镜像；代码来自对应版本的 k8s 源码树裁剪。
+A **slim extract of kube-scheduler** from [kubernetes/kubernetes](https://github.com/kubernetes/kubernetes), for reading the scheduler in isolation, call-graph analysis, or local experiments—without cloning the full Kubernetes tree.
 
-## 版本对应关系
+> **Not an official Kubernetes project.** Sources are carved from the corresponding Kubernetes release tree.
 
-| 本仓库 | 对应 Kubernetes |
-|--------|-----------------|
-| 分支 `release-X.Y` | k8s 分支 `release-X.Y` |
-| 标签 `vX.Y.Z` | k8s 发布标签 `vX.Y.Z` |
+## Version mapping
 
-**当前检出对应：Kubernetes `v1.37.1`（分支 `release-1.37`）**
+| This repository | Upstream Kubernetes |
+|-----------------|---------------------|
+| Branch `release-X.Y` | Branch `release-X.Y` |
+| Tag `vX.Y.Z` | Release tag `vX.Y.Z` |
 
-没有 `main` / `master` 主分支；请按版本切分支/标签，例如：
+**Current tree: Kubernetes `v1.37.1` (branch `release-1.37`).**
+
+There is no `main` / `master` default branch. Check out by release line or tag:
 
 ```bash
-git clone -b release-1.37 https://github.com/<owner>/kube-scheduler.git
-# 或固定补丁版本
+git clone -b release-1.37 https://github.com/autsu/kube-scheduler.git
+# or pin a patch release
 git checkout v1.37.1
 ```
 
-新版本发布后，本仓库会通过 CI 自动尝试同步，并创建同名的 `release-*` 分支与 `v*` 标签（详见下方「自动同步」）。
+When Kubernetes publishes a new release, CI attempts to sync this repo and create matching `release-*` branches and `v*` tags (see [Auto sync](#auto-sync-with-kubernetes-releases)).
 
-## 包含内容
+## What's included
 
-- `cmd/kube-scheduler/`：入口与 options
-- `pkg/scheduler/`：调度核心与 framework 插件
-- 少量 scheduler 直接依赖的 `pkg/api`、`pkg/apis`、`pkg/features` 等包
+- `cmd/kube-scheduler/` — entrypoint and options
+- `pkg/scheduler/` — core scheduling loop and framework plugins
+- A small set of in-tree helpers (`pkg/api`, `pkg/apis`, `pkg/features`, …) required by the scheduler
 
-完整 kubernetes 通常数 GB；本仓约十几 MB 量级。
+Full Kubernetes is usually multi‑GB; this repo is on the order of tens of MB.
 
-## 用 Callscape 分析
-
-```
-项目路径: <本仓库本地路径>
-包范围:   ./pkg/scheduler
-# 或
-./pkg/scheduler/...
-./cmd/kube-scheduler/...
-./pkg/scheduler/framework/...
-```
-
-## 编译 / 运行
+## Build & run
 
 ```bash
 GOWORK=off go build -o kube-scheduler ./cmd/kube-scheduler
 ./kube-scheduler --help
 ```
 
-进集群调度需要可用的 kube-apiserver（例如 `--kubeconfig`）。  
-版本字符串可能显示为 `v0.0.0-master+...`，因为精简包未注入官方 release 链接信息。
+Scheduling against a cluster requires a reachable kube-apiserver (e.g. `--kubeconfig`).  
+The version string may show as `v0.0.0-master+...` because this slim tree does not inject official release linker metadata.
 
-建议用**自定义** `schedulerName`，避免和集群自带 default-scheduler 抢 leader：
+Prefer a **custom** `schedulerName` so you do not compete with the cluster's default scheduler:
 
 ```yaml
 # KubeSchedulerConfiguration
@@ -66,27 +57,42 @@ spec:
   schedulerName: callscape-scheduler
 ```
 
-## 自动同步（跟 k8s 发版）
+## Call-graph / source reading (e.g. Callscape)
 
-仓库内置：
+```
+Project root: <path-to-this-repo>
+Package pattern: ./pkg/scheduler
+# or
+./pkg/scheduler/...
+./cmd/kube-scheduler/...
+./pkg/scheduler/framework/...
+```
 
-1. `scripts/sync-from-kubernetes.sh`：从指定 k8s tag 抽取 scheduler 相关包并更新工作树  
-2. `.github/workflows/sync-k8s-release.yml`：定时 / 手动检查 k8s 新 release，同步后推送同名分支与 tag
+## Auto sync with Kubernetes releases
 
-工作流会：
+Bundled tooling:
 
-1. 读取 kubernetes 最新（或指定）release tag，例如 `v1.38.0`  
-2. 抽取 `cmd/kube-scheduler`、`pkg/scheduler` 及其 kubernetes 树内依赖包  
-3. 推送/更新分支 `release-1.38`，并打标签 `v1.38.0`
+1. `scripts/sync-from-kubernetes.sh` — extract scheduler-related packages from a given Kubernetes tag  
+2. `.github/workflows/sync-k8s-release.yml` — scheduled / manual check for new Kubernetes releases, then push matching branch + tag
 
-也可本地手动跑：
+Workflow outline:
+
+1. Resolve the latest (or specified) Kubernetes release tag, e.g. `v1.38.0`  
+2. Extract `cmd/kube-scheduler`, `pkg/scheduler`, and required in-tree deps  
+3. Push/update branch `release-1.38` and tag `v1.38.0`
+
+Manual sync:
 
 ```bash
 ./scripts/sync-from-kubernetes.sh v1.37.1
 ```
 
-## 说明
+## Notes
 
-- `go.mod` 去掉了 kubernetes staging `replace`，改用已发布的 `k8s.io/*` 模块依赖  
-- 以阅读、调用图分析、二次实验为主；不保证覆盖官方全部构建/测试目标  
-- Upstream：https://github.com/kubernetes/kubernetes
+- `go.mod` drops Kubernetes staging `replace` directives and uses published `k8s.io/*` modules  
+- Aimed at reading, call-graph analysis, and experimentation—not a drop-in replacement for every official build/test target  
+- Upstream: https://github.com/kubernetes/kubernetes
+
+## License
+
+Source files retain their original Kubernetes licensing (typically Apache-2.0). See upstream for details.

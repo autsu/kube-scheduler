@@ -117,12 +117,16 @@ cp "$ROOT/scripts/sync-from-kubernetes.sh" "$STAGE/scripts/"
 cp "$ROOT/.github/workflows/sync-k8s-release.yml" "$STAGE/.github/workflows/" 2>/dev/null || true
 cp "$ROOT/.gitignore" "$STAGE/.gitignore" 2>/dev/null || true
 
-# Refresh README version line
+# Preserve bilingual READMEs and refresh the "current version" line
 if [[ -f "$ROOT/README.md" ]]; then
-  sed "s/Kubernetes \`v[0-9.]*\`（分支 \`release-[0-9.]*\`）/Kubernetes \`${TAG}\`（分支 \`${BRANCH}\`）/" \
-    "$ROOT/README.md" > "$STAGE/README.md" || cp "$ROOT/README.md" "$STAGE/README.md"
+  sed -E "s/Kubernetes \`v[0-9.]+\` \(branch \`release-[0-9.]+\`\)/Kubernetes \`${TAG}\` (branch \`${BRANCH}\`)/" \
+    "$ROOT/README.md" > "$STAGE/README.md"
 else
   echo "# kube-scheduler (from kubernetes ${TAG})" > "$STAGE/README.md"
+fi
+if [[ -f "$ROOT/README.zh-CN.md" ]]; then
+  sed -E "s/Kubernetes \`v[0-9.]+\`（分支 \`release-[0-9.]+\`）/Kubernetes \`${TAG}\`（分支 \`${BRANCH}\`）/" \
+    "$ROOT/README.zh-CN.md" > "$STAGE/README.zh-CN.md"
 fi
 
 echo "==> replacing working tree (keeping .git)"
