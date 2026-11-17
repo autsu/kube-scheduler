@@ -1,0 +1,5 @@
+.DS_Store
+.callscape/*.tmp
+*.test
+/bin/
+/kube-scheduler
