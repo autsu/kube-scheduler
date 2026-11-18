@@ -13,10 +13,12 @@ if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 2
 fi
 
-MINOR="${TAG#v}"
-MINOR="${MINOR%.*}"          # 1.37
+# TAG=v1.37.2 → MINOR=1.37, BRANCH=release-1.37, API_VER=v0.37.2
+# Published staging modules use v0.<minor>.<patch> (drop the leading major 1).
+VER="${TAG#v}"               # 1.37.2
+MINOR="${VER%.*}"            # 1.37
 BRANCH="release-${MINOR}"    # release-1.37
-API_VER="v0.${TAG#v}"        # v0.37.1
+API_VER="v0.${VER#*.}"       # v0.37.2
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ks-sync.XXXXXX")"
