@@ -13,7 +13,7 @@
 | 分支 `release-X.Y` | k8s 分支 `release-X.Y` |
 | 标签 `vX.Y.Z` | k8s 发布标签 `vX.Y.Z` |
 
-**当前检出对应：Kubernetes `v1.37.1`（分支 `release-1.37`）。**
+**当前检出对应：Kubernetes `v1.37.2`（分支 `release-1.37`）。**
 
 没有 `main` / `master` 主分支；请按版本切分支/标签：
 

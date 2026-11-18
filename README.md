@@ -13,7 +13,7 @@ A **slim extract of kube-scheduler** from [kubernetes/kubernetes](https://github
 | Branch `release-X.Y` | Branch `release-X.Y` |
 | Tag `vX.Y.Z` | Release tag `vX.Y.Z` |
 
-**Current tree: Kubernetes `v1.37.1` (branch `release-1.37`).**
+**Current tree: Kubernetes `v1.37.2` (branch `release-1.37`).**
 
 There is no `main` / `master` default branch. Check out by release line or tag:
 
