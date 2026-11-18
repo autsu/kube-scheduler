@@ -16,11 +16,48 @@ fi
 MINOR="${TAG#v}"
 MINOR="${MINOR%.*}"          # 1.37
 BRANCH="release-${MINOR}"    # release-1.37
+API_VER="v0.${TAG#v}"        # v0.37.1
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ks-sync.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
+
+# Published k8s.io/kubernetes module zips omit staging/src, but go.mod still has
+# replace => ./staging/... . Rewrite to published k8s.io/* modules before go list.
+rewrite_gomod() {
+  local gomod="$1"
+  local api_ver="$2"
+  python3 - "$gomod" "$api_ver" <<'PY'
+import re, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+api_ver = sys.argv[2]
+
+text = path.read_text()
+out = []
+in_replace = False
+for line in text.splitlines(True):
+    if line.startswith("replace ("):
+        in_replace = True
+        continue
+    if in_replace:
+        if line.strip() == ")":
+            in_replace = False
+        continue
+    if line.startswith("replace "):
+        continue
+    out.append(line)
+text = "".join(out)
+
+# Staging modules are v0.0.0 in monorepo go.mod → published v0.X.Y
+# Do NOT rewrite pseudo-versions like v0.0.0-2026...
+text = re.sub(r"(k8s\.io/[a-z0-9./-]+) v0\.0\.0\b(?!-)", rf"\1 {api_ver}", text)
+path.write_text(text)
+print(f"rewrote staging deps to {api_ver}")
+PY
+}
 
 echo "==> fetching kubernetes ${TAG}"
 # Prefer module cache / proxy content for that version
@@ -41,13 +78,34 @@ mkdir -p "$SRC"
 cp -R "$MODULE_DIR"/. "$SRC"/
 chmod -R u+w "$SRC"
 
+echo "==> rewriting go.mod for published staging modules (${API_VER})"
+rewrite_gomod "$SRC/go.mod" "$API_VER"
+
 echo "==> resolving kubernetes-internal packages for scheduler"
 cd "$SRC"
-GOWORK=off GOFLAGS=-mod=mod go list -deps -f '{{.ImportPath}}' \
-  ./pkg/scheduler/... ./cmd/kube-scheduler/... 2>/dev/null \
-  | grep '^k8s.io/kubernetes/' \
+# -e: keep going when a leaf dep fails; we only need k8s.io/kubernetes/* paths.
+# stderr was previously discarded, which hid the staging/replace failure.
+set +e
+GOWORK=off GOFLAGS=-mod=mod go list -e -deps -f '{{.ImportPath}}' \
+  ./pkg/scheduler/... ./cmd/kube-scheduler/... \
+  >"$WORK/list.raw" 2>"$WORK/list.err"
+list_ec=$?
+set -e
+if [[ -s "$WORK/list.err" ]]; then
+  echo "==> go list warnings/errors (non-fatal unless no packages found):"
+  grep -v '^go: downloading ' "$WORK/list.err" | head -40 || true
+fi
+
+grep '^k8s.io/kubernetes/' "$WORK/list.raw" \
   | grep -v '^k8s.io/kubernetes/test/' \
-  | sort -u > "$WORK/pkgs.txt"
+  | sort -u > "$WORK/pkgs.txt" || true
+
+if [[ ! -s "$WORK/pkgs.txt" ]]; then
+  echo "failed to resolve any k8s.io/kubernetes packages (go list exit=${list_ec})" >&2
+  tail -50 "$WORK/list.err" >&2 || true
+  exit 1
+fi
+echo "==> found $(wc -l < "$WORK/pkgs.txt" | tr -d ' ') internal packages"
 
 {
   echo 'k8s.io/kubernetes/pkg/scheduler'
@@ -75,41 +133,7 @@ done < "$WORK/copy.txt"
 
 cp "$SRC/go.mod" "$STAGE/go.mod"
 cp "$SRC/go.sum" "$STAGE/go.sum" 2>/dev/null || true
-
-python3 - <<'PY' "$STAGE/go.mod" "$TAG"
-import re, sys
-from pathlib import Path
-path = Path(sys.argv[1])
-tag = sys.argv[2]  # v1.37.1
-minor = tag[1:].rsplit(".", 1)[0]  # 1.37
-pub = f"v{minor}.1" if tag.count(".") == 2 else tag
-# Prefer exact patch for published staging modules: v1.37.1
-pub = tag  # k8s.io/api etc use v0.37.1 — map below
-
-text = path.read_text()
-out = []
-in_replace = False
-for line in text.splitlines(True):
-    if line.startswith("replace ("):
-        in_replace = True
-        continue
-    if in_replace:
-        if line.strip() == ")":
-            in_replace = False
-        continue
-    if line.startswith("replace "):
-        continue
-    out.append(line)
-text = "".join(out)
-
-# k8s staging modules are v0.0.0 in monorepo go.mod → published v0.X.Y
-patch = tag[1:]  # 1.37.1
-api_ver = "v0." + patch  # v0.37.1
-text = re.sub(r"(k8s\.io/[a-z0-9./-]+) v0\.0\.0\b(?!-)", rf"\1 {api_ver}", text)
-# Do NOT rewrite pseudo-versions like v0.0.0-2026...
-path.write_text(text)
-print(f"rewrote staging deps to {api_ver}")
-PY
+# go.mod already rewritten above; keep STAGE copy as-is
 
 # Preserve repo meta files
 mkdir -p "$STAGE/scripts" "$STAGE/.github/workflows"
